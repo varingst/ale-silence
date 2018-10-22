@@ -1,0 +1,41 @@
+Before:
+  let g:ale_silence_TESTING = 1
+  runtime autoload/ale/silence.vim
+
+  let g:ale_buffer_info = {
+  \ 99: {
+  \   'loclist': [
+  \     {'bufnr': 98,  'lnum': 3, 'linter_name': 'test', 'code': 'err1'},
+  \     {'bufnr': 99,  'lnum': 2, 'linter_name': 'test', 'code': 'err2'},
+  \     {'bufnr': 99,  'lnum': 3, 'linter_name': 'test', 'code': 'err3'},
+  \     {'bufnr': 99,  'lnum': 3, 'linter_name': 'test', 'code': 'err4'},
+  \     {'bufnr': 99,  'lnum': 4, 'linter_name': 'test', 'code': 'err2'},
+  \     {'bufnr': 100, 'lnum': 3, 'linter_name': 'test', 'code': 'err1'},
+  \   ],
+  \ }
+  \}
+
+Execute (s:get_buffer_info gets buffer info):
+  AssertEqual g:ale_buffer_info['99']['loclist'], S('get_buffer_info', '99')
+
+Execute (s:filter_list filters on file range):
+  let loclist = g:ale_buffer_info['99']['loclist']
+  let in_buffer = loclist[1:-2]
+  AssertEqual in_buffer, S('filter_list', '99')
+
+  let line = loclist[2:-3]
+  AssertEqual line, S('filter_list', '99', 3)
+
+  let range = loclist[2:-2]
+  AssertEqual range, S('filter_list', '99', 3, 4)
+
+Execute (s:parse_cmd_line parses range/count from command line):
+  AssertEqual [''], S('parse_cmd_line', 'ALESilence', [''])
+  AssertEqual ['', 23], S('parse_cmd_line', '23ALESilence', [''])
+  AssertEqual ['', 23, 25], S('parse_cmd_line', '23,25ALESilence', [''])
+
+Execute (ale#silence#complete completes errors in file):
+  let g:ale_silence_TESTING_winbufnr = 99
+
+  let expected = [ 'test:err2', 'test:err3', 'test:err4' ]
+  AssertEqual expected, ale#silence#complete('', '2,4ALESilence', '')

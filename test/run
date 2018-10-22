@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+main() {
+  [[ -d test ]] || bail "run from project root containing directory 'test'"
+
+  if [[ "$1" == watch ]]; then
+    watch
+  else
+    run "$@"
+  fi
+}
+
+watch() {
+  while read -r file; do
+    case "$file" in
+      ./test/*.vader) run "$file";;
+      *.vim)
+        run "test/${file%.vim}.vader" || run
+      ;;
+    esac
+  done < <(notify)
+}
+
+notify() {
+  inotifywait \
+    --recursive \
+    --monitor \
+    --event close_write \
+    --format '%w%f' \
+    .
+}
+
+run() {
+  if [[ -z "$1" ]]; then
+    shopt -s globstar
+    set -- test/**/*.vader
+    echo running all: "$@"
+  fi
+  # TODO: find better way to run all
+  for file; do
+    if [[ -s "$1" ]]; then
+      vim --not-a-term -Nu <(vimrc) '+Vader!' "$file" || break
+    fi
+  done
+}
+
+vimrc() {
+  if [[ -s test/vimrc ]]; then
+    cat test/vimrc
+    return
+  fi
+  cat <<EOF
+filetype off
+set rtp+=~/.vim/plugged/vader.vim
+set rtp+=.
+set rtp+=./after
+EOF
+}
+
+bail() {
+  printf '%s\n' "$@" >&2
+  exit 1
+}
+
+main "$@"
