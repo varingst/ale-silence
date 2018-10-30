@@ -31,9 +31,10 @@ function! ale#silence#complete(arg_lead, cmd_line, cursor_pos) abort " {{{2
   " creates completions
   " TODO: add handling of filewise bang!
   let args = s:parse_cmd_line(a:cmd_line, [s:winbufnr('.')])
-  return uniq(sort(map(filter(call('s:filter_range', args),
-                  \           'has_key(v:val, "code")'),
-                  \    funcref('s:error_id'))))
+  return join(uniq(sort(map(filter(call('s:filter_range', args),
+                      \           'has_key(v:val, "code")'),
+                      \     funcref('s:error_id')))),
+            \ "\n")
 endfunction
 
 function! ale#silence#Format(format, ...) abort " {{{2
@@ -48,6 +49,14 @@ endfunction
 
 let s:directives = 'ale_linter_silence_directive'
 let s:unsupported = 'ale_linter_silence_unsupported'
+let s:directive_order = [
+      \ 'file',
+      \ 'nextline',
+      \ 'inline',
+      \ 'start',
+      \ 'end'
+      \]
+let s:[s:unsupported] = {}
 
 " -- Disablers -- {{{1
 
@@ -266,12 +275,7 @@ function! s:get_formatter(error, type) abort " {{{2
   let directives = s:get_nested(g:, '', s:directives, a:error.linter_name)
 
   if type(directives) isnot v:t_dict
-    try
-      let directives = s:get_directives(a:error.linter_name)
-    catch /E117/
-      call s:set_nested(g:, v:true, s:unsupported, a:error.linter_name)
-      return
-    endtry
+    let directives = s:get_directives(a:error.linter_name)
     call s:set_nested(g:, directives, s:directives, a:error.linter_name)
   endif
 
@@ -279,7 +283,7 @@ function! s:get_formatter(error, type) abort " {{{2
   if Format == ''
     return
   elseif type(Format) is v:t_string
-    let Format = ale#silence#Format(Format)
+    let Format = ale#silence#Format(Format, get(directives, 'separator', ' '))
     call s:set_nested(g:, Format,
                     \ s:directives,
                     \ a:error.linter_name,
@@ -291,8 +295,34 @@ function! s:get_formatter(error, type) abort " {{{2
   return Format
 endfunction
 
+function! ale#silence#List(...) abort " {{{2
+  let lines = []
+  for linter in map(s:partition(s:get_buffer_info(a:0 ? a:1 : s:winbufnr('')),
+                 \              'linter_name'),
+                 \ 'v:val[0].linter_name')
+
+    call add(lines, printf("==== %s ====", linter))
+    let directives = s:get_directives(linter)
+    for name in s:directive_order
+      if !has_key(directives, name)
+        continue
+      endif
+      let Format = type(directives[name]) is v:t_string ?
+            \ ale#silence#Format(directives[name]) :
+            \ directives[name]
+      call add(lines, printf("%-10s %s", name, Format(['<err1>', '<err2>', '...'])))
+    endfor
+  endfor
+  return lines
+endfunction
+
 function! s:get_directives(linter) " {{{2
-  return call('ale_silence#'.a:linter.'#GetSilenceDirective', [])
+  try
+    return call('ale_silence#'.a:linter.'#GetSilenceDirectives', [])
+  catch /E117/
+    let s:[s:unsupported][a:linter] = v:true
+    return {}
+  endtry
 endfunction
 
 function! s:get_buffer_info(bufnr) abort " {{{2
@@ -317,7 +347,7 @@ endfunction
 function! s:filter_supported(errors) abort
   let supported = []
   for per_linter in a:errors
-    if s:get_nested(g:, 0, s:unsupported, per_linter[0].linter_name)
+    if s:get_nested(s:, v:false, s:unsupported, per_linter[0].linter_name)
       continue
     endif
     call add(supported, per_linter)
@@ -358,7 +388,11 @@ endfunction
 function! s:parse_cmd_line(cmd_line, args) abort
   " find start of command by first uppercase letter
   let cmd_start = match(a:cmd_line, '\u')
+  let cmd_last = match(a:cmd_line, '\(\s\|$\)') - 1
   if cmd_start == 0
+    if cmd_last >= 0 && a:cmd_line[cmd_last] != '!'
+      return add(a:args, line('.'))
+    endif
     return a:args
   elseif cmd_start > 0
     return extend(a:args, map(split(a:cmd_line[:cmd_start-1], ','),

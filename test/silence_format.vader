@@ -1,3 +1,4 @@
+Include: func.vader
 Before:
   let g:ale_silence_TESTING = 1
   let g:ale_loaded = 1
@@ -26,29 +27,12 @@ Before:
     \ },
   \ }
 
-  function! EntryFor(name)
-    let name = a:name
-    function! Entry(bufnr, lnum, code) closure
-      return {
-        \ 'bufnr': a:bufnr,
-        \ 'lnum':  a:lnum,
-        \ 'code':  a:code,
-        \ 'linter_name': name
-        \ }
-    endfun
-    return funcref('Entry')
-  endfun
-
-  function! SetBufferInfo(bufnr, ...)
-    let g:ale_buffer_info = {
-    \ a:bufnr : { 'loclist': a:000 }
-    \ }
-  endfun
 
   let Entry1 = EntryFor('test1')
   let Entry2 = EntryFor('test2')
   let InlineOnly = EntryFor('inline-only')
   let NextlineOnly = EntryFor('nextline-only')
+  let Rubocop = EntryFor('rubocop')
 
 Execute (ale#silence#Format returns a directive formatter function):
   let FmtDir = ale#silence#Format('linter: %s')
@@ -297,7 +281,7 @@ Expect ruby (:ALESilence handles mix of range, inline and nextline):
   end # inline-only: error1
   # test1-enable: error1
 
-Execute (ale_linters#<ft>#<linter>#GetSilenceDirectives gets directives):
+Execute (ale_linters#<linter>#GetSilenceDirectives gets directives):
   let d = ale_silence#rubocop#GetSilenceDirectives()
   Assert type(d) is v:t_dict
 
@@ -305,4 +289,30 @@ Execute (s:set_nested sets a value in nested dictionaries):
   call S('set_nested', g:, 'value', 'key1', 'key2', 'key3')
   AssertEqual 'value', g:key1.key2.key3
 
-" TODO: Some testing with the directive loading
+Given ruby:
+  def foo
+    :bar
+  end
+
+Execute:
+  let nr = bufnr('')
+  let g:ale_silence_TESTING_winbufnr = nr
+  call SetBufferInfo(bnr,
+    \ Rubocop(bnr, 1, 'error1'),
+    \ Rubocop(bnr, 3, 'error2')
+    \)
+
+Execute (ale#silence#List returns list of strings describing directives):
+  AssertEqual [
+    \ '==== rubocop ====',
+    \ 'file       # rubocop: disable <err1> <err2> ...',
+    \ 'inline     # rubocop: disable <err1> <err2> ...',
+    \ 'start      # rubocop: disable <err1> <err2> ...',
+    \ 'end        # rubocop: enable <err1> <err2> ...'
+    \ ], ale#silence#List()
+
+Execute (ale#silence#complete only provides errors for current line):
+  AssertEqual join([
+    \ 'rubocop:error1'
+    \], "\n"), ale#silence#complete('', 'ALESilence', '')
+  Log g:ale_buffer_info
