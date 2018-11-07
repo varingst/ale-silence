@@ -93,7 +93,7 @@ function! ale#silence#LookupError(error_id) abort " {{{2
   call s:browse(printf(search, info.code))
 endfunction
 
-function! ale#silence#BrowseDocs(linter_name) abort " {{{
+function! ale#silence#BrowseDocs(linter_name) abort " {{{2
   let optname = s:linter_docs_prefix.a:linter_name
 
   let url = s:getopt(optname, '')

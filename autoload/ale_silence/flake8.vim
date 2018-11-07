@@ -10,3 +10,10 @@ function! ale_silence#flake8#GetSilenceDirectives() abort
         \ 'separator': ','
         \}
 endfun
+
+" no need to do code search since the descriptions are anemic
+function! ale_silence#flake8#GetDocInfo() abort
+  return {
+        \ 'docs': 'http://flake8.pycqa.org/en/latest/',
+        \ }
+endfunction

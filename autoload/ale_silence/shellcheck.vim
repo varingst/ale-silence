@@ -5,3 +5,10 @@ function! ale_silence#shellcheck#GetSilenceDirectives() abort
         \ 'separator': ','
         \}
 endfunction
+
+function! ale_silence#shellcheck#GetDocInfo() abort
+  return {
+        \ 'docs': 'https://github.com/koalaman/shellcheck/wiki',
+        \ 'code_search': 'https://https://github.com/koalaman/shellcheck/wiki/%s'
+        \}
+endfunction

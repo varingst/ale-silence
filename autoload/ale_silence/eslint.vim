@@ -7,3 +7,10 @@ function! ale_silence#eslint#GetSilenceDirectives() abort
         \ 'end':      '/* eslint-enable %s */'
         \}
 endfunction
+
+function! ale_silence#eslint#GetDocInfo() abort
+  return {
+        \ 'docs': 'https://esling.org',
+        \ 'code_search': 'https://eslint.org/docs/rules/%s'
+        \}
+endfunction
