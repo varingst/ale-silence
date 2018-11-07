@@ -259,6 +259,7 @@ function! s:disable_range_linewise(errors) abort " {{{2
 endfunction
 
 " -- Util -- {{{1
+"
 function! s:getopt(key, default) " {{{2
   return s:get(a:key.'_'.&filetype,
              \ s:get(a:key, a:default, b:, g:, s:),
@@ -401,7 +402,7 @@ function! s:filter_range(bufnr, ...) abort " {{{2
   endif
 endfunction
 
-function! s:filter_supported(errors) abort
+function! s:filter_supported(errors) abort " {{{2
   let supported = []
   for per_linter in a:errors
     if s:get_nested(s:, v:false, s:unsupported, per_linter[0].linter_name)
@@ -412,7 +413,7 @@ function! s:filter_supported(errors) abort
   return supported
 endfun
 
-function! s:filter_errors(errors, error_ids) abort
+function! s:filter_errors(errors, error_ids) abort " {{{2
   if empty(a:error_ids)
     return a:errors
   endif
@@ -435,16 +436,16 @@ function! s:filter_errors(errors, error_ids) abort
   return filtered
 endfunction
 
-function! s:error_id(key, error) abort
+function! s:error_id(key, error) abort " {{{2
   return a:error.linter_name . ':' . a:error.code
 endfunction
 
-function! s:from_error_id(error_id) abort
+function! s:from_error_id(error_id) abort " {{{2
   let parts = split(a:error_id, ':')
   return { 'linter_name': parts[0], 'code': join(parts[1:], ':') }
 endfunction
 
-function! s:complete_errors_in_range(range_args) " {{{2
+function! s:complete_errors_in_range(range_args) abort " {{{2
   return join(uniq(sort(map(filter(call('s:filter_range', a:range_args),
                       \           'has_key(v:val, "code")'),
                       \     funcref('s:error_id')))),
@@ -452,11 +453,10 @@ function! s:complete_errors_in_range(range_args) " {{{2
 endfun
 
 
-" cmd_line: command line in the form of M,MCmd, N,NCmd, NCmd or Cmd
-"           where N is a line number and M is a mark
-" args:     argument list for adding parsed range/count
-function! s:parse_cmd_line(cmd_line, args) abort
-  " find start of command by first uppercase letter
+function! s:parse_cmd_line(cmd_line, args) abort " {{{2
+  " cmd_line: command line in the form of M,MCmd, N,NCmd, NCmd or Cmd
+  "           where N is a line number and M is a mark
+  " args:     argument list for adding parsed range/count
   let cmd_start = match(a:cmd_line, '\u')
   let cmd_last = match(a:cmd_line, '\(\s\|$\)') - 1
   if cmd_start == 0
@@ -471,7 +471,7 @@ function! s:parse_cmd_line(cmd_line, args) abort
   endif
 endfunction
 
-" -- OPTIONS -- {{{1
+" -- Options -- {{{1
 
 let s:ale_silence_filewise_fallback = 0
 let s:ale_silence_prefer_inline = 0
@@ -492,7 +492,7 @@ let s:linter_docs_prefix = 'ale_docs_'
 let s:[s:unsupported] = {}
 
 
-" -- TESTING -- {{{1
+" -- Testing -- {{{1
 
 if get(g:, 'ale_silence_TESTING')
   function! s:winbufnr(arg) abort
