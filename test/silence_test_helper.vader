@@ -58,6 +58,11 @@ Execute (include helper):
       \ 'nextline-only': {
         \ 'nextline': '# nextline-only: %s'
       \ },
+      \ 'nofile': {
+        \ 'nextline': '# nofile-next: %s',
+        \ 'start':    '# nofile-disable: %s',
+        \ 'end':      '# nofile-enable: %s'
+      \ },
     \ }
   endfun
 

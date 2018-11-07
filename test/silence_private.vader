@@ -57,12 +57,39 @@ Given ruby:
     end
   end
 
+Execute (s:disable_next_line returns remainder with updated line numbers):
+  let bnr = bufnr('')
+  let g:remainder = S('disable_next_line', [
+      \ NextlineOnly(bnr, 3, 'error1'),
+      \ InlineOnly(bnr, 1, 'error3'),
+      \ InlineOnly(bnr, 3, 'error1'),
+      \ InlineOnly(bnr, 6, 'error4')
+      \ ])
+  let g:remainder = S('disable_next_line',
+                    \ [NextlineOnly(bnr, 6, 'error2')] + g:remainder)
+  AssertEqual [
+      \ InlineOnly(bnr, 1, 'error3'),
+      \ InlineOnly(bnr, 4, 'error1'),
+      \ InlineOnly(bnr, 8, 'error4')
+      \ ], g:remainder
+
+Expect ruby (s:disable_next_line updates line number):
+  def foo
+    if bar
+      # nextline-only: error1
+      :bar
+    else
+      # nextline-only: error2
+      :baz
+    end
+  end
+
 Execute:
   let bnr = bufnr('')
   call S('disable_range', [Entry1(bnr, 1, 'error2')], 1, 7)
   call S('disable_range', [
-      \ Entry1(bufnr(''), 3, 'error1'),
-      \ Entry2(bufnr(''), 3, 'error1')
+      \ Entry1(bnr, 3, 'error1'),
+      \ Entry2(bnr, 3, 'error1')
       \ ], 3, 7)
 
 Expect ruby (s:disable_range silences in range):
@@ -78,6 +105,31 @@ Expect ruby (s:disable_range silences in range):
   end
   # test1-enable: error2
 
+Execute (s:disable_range returns remainder with updated line numbers):
+  let bnr = bufnr('')
+  let g:remainder = S('disable_range', [
+    \ Entry1(bnr, 3, 'error1'),
+    \ Entry1(bnr, 5, 'error5'),
+    \ NextlineOnly(bnr, 2, 'error1'),
+    \ NextlineOnly(bnr, 7, 'error2')
+    \ ], 1, 7)
+
+  AssertEqual [
+    \ NextlineOnly(bnr, 3, 'error1'),
+    \ NextlineOnly(bnr, 8, 'error2')
+    \ ], g:remainder
+
+Expect ruby (s:disable_range updates line numbers):
+  # test1-disable: error1 error5
+  def foo
+    if bar
+      :bar
+    else
+      :baz
+    end
+  end
+  # test1-enable: error1 error5
+
 Given ruby:
   def foo
     :bar
@@ -85,17 +137,18 @@ Given ruby:
 
 Execute:
   let bnr = bufnr('')
-  call S('disable_file', [
-      \ Entry1(bnr, 1, 'error2'),
-      \ Entry1(bnr, 3, 'error1'),
-      \ Entry2(bnr, 3, 'error1')
-      \ ], 1)
+  call S('disable_range_linewise', [
+    \ InlineOnly(bnr, 1, 'error1'),
+    \ InlineOnly(bnr, 2, 'error2'),
+    \ NextlineOnly(bnr, 1, 'error1'),
+    \ NextlineOnly(bnr, 3, 'error3')
+    \])
 
-Expect ruby (s:disable_file silences whole file):
-  # test1-file: error1 error2
-  # test2-file: error1
-  def foo
-    :bar
+Expect ruby (s:disable_range_linewise silences range linewise):
+  # nextline-only: error1
+  def foo # inline-only: error1
+    :bar # inline-only: error2
+  # nextline-only: error3
   end
 
 Execute (s:parse_cmd_line determines range from command line):

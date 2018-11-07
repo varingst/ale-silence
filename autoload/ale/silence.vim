@@ -3,30 +3,29 @@
 function! ale#silence#(bang, line1, line2, ...) abort " {{{2
   " a:000 : errors to silence. if none given, silence all in range
   let bufnr = winbufnr('.')
+  let open = a:line1
+  let close = a:line2
 
-  if a:bang " silence filewise
-    let errors = a:line1 == a:line2 ?
-               \ s:filter_errors(s:filter_range(bufnr, 1, line('$')), a:000) :
-               \ s:filter_errors(s:filter_range(bufnr, a:line1, a:line2), a:000)
+  if a:bang
+    let [remainder, open, close] = s:disable_file(bufnr, open, close, a:000)
 
-    let remainder = s:disable_file(errors, a:line1)
-    if s:getopt('ale_silence_filewise_fallback', 0)
+    if !s:getopt('ale_silence_filewise_fallback', 0)
       return remainder
     endif
   endif
 
   let errors = a:bang ?
              \ remainder :
-             \ s:filter_errors(s:filter_range(bufnr, a:line1, a:line2), a:000)
+             \ s:filter_errors(s:filter_range(bufnr, open, close), a:000)
 
-  if a:line1 == a:line2
+  if open == close
     return s:getopt('ale_silence_prefer_inline', 0) ?
          \ s:disable_next_line(s:disable_inline(errors)) :
          \ s:disable_inline(s:disable_next_line(errors))
   else
     return s:getopt('ale_silence_range_fallback', 1) ?
-         \ s:disable_range_linewise(s:disable_range(errors, a:line1, a:line2)) :
-         \ s:disable_range(errors, a:line1, a:line2)
+         \ s:disable_range_linewise(s:disable_range(errors, open, close)) :
+         \ s:disable_range(errors, open, close)
   endif
 endfunction
 
@@ -63,8 +62,8 @@ endfunction
 function! ale#silence#complete_lookup(arg_lead, cmd_line, cursor_pos) abort " {{{ {{{2
   let bufnr = s:winbufnr('.')
   let line = line('.')
-  let comp = s:complete_errors_in_range([bufnr, line, line])
-  return strlen(comp) > 0 ? comp : s:complete_errors_in_range([bufnr])
+  let compl = s:complete_errors_in_range([bufnr, line, line])
+  return strlen(compl) > 0 ? compl : s:complete_errors_in_range([bufnr])
 endfunction
 
 function! ale#silence#Format(format, ...) abort " {{{2
@@ -118,7 +117,7 @@ function! s:disable_next_line(errors) abort " {{{2
   " disable-next-line: error-code
   " <line with error>
   if empty(a:errors)
-    return
+    return []
   endif
 
   let lnum = a:errors[0].lnum
@@ -146,7 +145,7 @@ endfunction
 function! s:disable_inline(errors) abort " {{{2
   " <line with error> disable-this-line: error-code
   if empty(a:errors)
-    return
+    return []
   endif
 
   let lnum = a:errors[0].lnum
@@ -170,14 +169,14 @@ function! s:disable_inline(errors) abort " {{{2
   return remainder
 endfunction
 
-function! s:disable_range(errors, l_start, l_end) abort " {{{2
+function! s:disable_range(errors, open, close) abort " {{{2
   " disable-from-this-line: error-code
   " ...
   " <line with error>
   " ...
   " enable-from-this-line: error-code
   if empty(a:errors)
-    return
+    return []
   endif
 
   let open_line = []
@@ -197,23 +196,28 @@ function! s:disable_range(errors, l_start, l_end) abort " {{{2
   endfor
 
   if !empty(open_line)
-    call append(a:l_end,       s:indent(getline(a:l_end)) . join(close_line))
-    call append(a:l_start - 1, s:indent(getline(a:l_start)) . join(open_line))
-    call s:offset_lnum(remainder, a:l_start)
+    call append(a:close,       s:indent(getline(a:close)) . join(close_line))
+    call append(a:open - 1, s:indent(getline(a:open)) . join(open_line))
+    call s:offset_lnum(remainder, a:open)
   endif
 
   return remainder
 endfunction
 
-function! s:disable_file(errors, lnum) abort " {{{2
-  if empty(a:errors)
-    return
+function! s:disable_file(bufnr, open, close, codes) abort " {{{2
+  let open  = a:open == a:close ? 1 : a:open
+  let close = a:open == a:close ? line('$') : a:close
+
+  let l:errors = s:filter_errors(s:filter_range(a:bufnr, open, close), a:codes)
+
+  if empty(l:errors)
+    return [[], a:open, a:close]
   endif
 
   let lines = []
   let remainder = []
 
-  for per_linter in s:filter_supported(s:partition(a:errors, 'linter_name'))
+  for per_linter in s:filter_supported(s:partition(l:errors, 'linter_name'))
     let Format = s:get_formatter(per_linter[0], 'file')
     if type(Format) isnot v:t_func
       call extend(remainder, per_linter)
@@ -224,13 +228,18 @@ function! s:disable_file(errors, lnum) abort " {{{2
   endfor
 
   if !empty(lines)
-    call append(a:lnum - 1, lines)
+    call append(a:open - 1, lines)
+    let open += 1
+    let close += 1
   endif
 
-  return remainder
+  return [remainder, open, close]
 endfunction
 
 function! s:disable_range_linewise(errors) abort " {{{2
+  if empty(a:errors)
+    return []
+  endif
   " range fallback: silence each line in range with
   " next_line/inline
   let remainder = []
@@ -240,6 +249,7 @@ function! s:disable_range_linewise(errors) abort " {{{2
 
     let next_line_remainder = s:disable_next_line(per_line)
     call extend(remainder, s:disable_inline(next_line_remainder))
+    " if s:disable_next_line consumed a line, a line was added to the file
     if len(next_line_remainder) < len(per_line)
       let lnum_offset += 1
     endif

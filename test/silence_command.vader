@@ -12,6 +12,7 @@ Before:
   let InlineOnly   = EntryFor('inline-only')
   let NextlineOnly = EntryFor('nextline-only')
   let Rubocop      = EntryFor('rubocop')
+  let Nofile       = EntryFor('nofile')
 
 Given ruby:
   def foo
@@ -113,10 +114,22 @@ Execute:
   \ InlineOnly(3, 'error1'),
   \ NextlineOnly(3, 'error1')
   \)
+  let g:ale_silence_range_fallback = 0
 Do:
   :1,3ALESilence\<CR>
 
-Expect ruby (:ALESilence uses nextline if range is not available):
+Expect ruby (:N,NALESilence does not fall back unless options is set):
+  def foo
+    :bar
+  end
+
+Execute:
+  let g:ale_silence_range_fallback = 1
+
+Do:
+  :1,3ALESilence\<CR>
+
+Expect ruby (:N,NALESilence falls back to linewise if option is set):
   # nextline-only: error1
   def foo # inline-only: error1
     :bar
@@ -137,7 +150,7 @@ Execute:
 Do:
   :1,3ALESilence\<CR>
 
-Expect ruby (:ALESilence handles mix of range, inline and nextline):
+Expect ruby (:N,NALESilence handles mix of range, inline and nextline):
   # test1-disable: error1
   # nextline-only: error1
   def foo # inline-only: error1
@@ -192,3 +205,88 @@ Expect ruby (:ALESilence! silences errors in range filewise):
   def foo
     :bar
   end
+
+Given ruby:
+  def foo
+    if bar
+      :bar
+    else
+      :baz
+    end
+  end
+
+Execute:
+  call SetBufferInfo(bufnr(''),
+  \ Entry1(2, 'error1'),
+  \ Entry1(5, 'error3'),
+  \ InlineOnly(2, 'error1'),
+  \ InlineOnly(4, 'error2'),
+  \ InlineOnly(5, 'error3'),
+  \ NextlineOnly(2, 'error1'),
+  \ NextlineOnly(4, 'error2'),
+  \ NextlineOnly(5, 'error3'),
+  \ Nofile(2, 'error1'),
+  \ Nofile(4, 'error2'),
+  \ Nofile(5, 'error3'))
+  let b:ale_silence_filewise_fallback = 0
+  " def foo
+  "   if @bar      inline:error1 nextline:error1 nofile:error1 test1: error1
+  "     :bar
+  "   else         inline:error2 nextline:error2 nofile:error2
+  "     :baz       inline:error3 nextline:error3 nofile:error3 test1: error3
+  "   end
+  " end
+
+Do:
+  :ALESilence!\<CR>
+
+Expect ruby (:ALESilence! does not fall back unless option is set):
+  # test1-file: error1 error3
+  def foo
+    if bar
+      :bar
+    else
+      :baz
+    end
+  end
+
+Execute:
+  let b:ale_silence_filewise_fallback = 1
+  let b:ale_silence_range_fallback = 0
+
+Do:
+  :ALESilence!\<CR>
+
+Expect ruby (:ALESilence! falls back to range when option is set):
+  # test1-file: error1 error3
+  # nofile-disable: error1 error2 error3
+  def foo
+    if bar
+      :bar
+    else
+      :baz
+    end
+  end
+  # nofile-enable: error1 error2 error3
+
+Execute:
+  let b:ale_silence_range_fallback = 1
+  let b:ale_silence_filewise_fallback = 1
+
+Do:
+  :ALESilence!\<CR>
+
+Expect ruby (:ALESilence! does fall back when option is set):
+  # test1-file: error1 error3
+  # nofile-disable: error1 error2 error3
+  def foo
+    # nextline-only: error1
+    if bar # inline-only: error1
+      :bar
+    # nextline-only: error2
+    else # inline-only: error2
+      # nextline-only: error3
+      :baz # inline-only: error3
+    end
+  end
+  # nofile-enable: error1 error2 error3
