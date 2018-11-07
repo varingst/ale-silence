@@ -1,0 +1,156 @@
+Include: silence_test_helper.vader
+Before:
+  let g:ale_silence_TESTING = 1
+  let g:ale_loaded = 1
+  " runtime plugin/ale-silence.vim
+  runtime autoload/ale/silence.vim
+
+  let g:ale_linter_silence_directive = TestLinters()
+
+  let Entry1       = EntryFor('test1')
+  let Entry2       = EntryFor('test2')
+  let InlineOnly   = EntryFor('inline-only')
+  let NextlineOnly = EntryFor('nextline-only')
+  let Rubocop      = EntryFor('rubocop')
+
+Given ruby:
+  def foo
+    :bar
+  end
+
+Execute:
+  let bnr = bufnr('')
+  call S('disable_inline', [Entry1(bnr, 1, 'error2')])
+  call S('disable_inline', [
+      \ Entry1(bufnr(''), 2, 'error1'),
+      \ Entry2(bufnr(''), 2, 'error1')
+      \ ])
+  call S('disable_inline', [])
+
+Expect ruby (s:disable_inline silences inline linewise):
+  def foo # test1-inline: error2
+    :bar # test1-inline: error1 # test2-inline: error1
+  end
+
+Execute:
+  let bnr = bufnr('')
+  call S('disable_next_line', [Entry1(bnr, 1, 'error2')])
+  call S('disable_next_line', [
+      \ Entry1(bufnr(''), 3, 'error1'),
+      \ Entry2(bufnr(''), 3, 'error1')
+      \ ])
+  call S('disable_next_line', [])
+
+Expect ruby (s:disable_next_line silences inline next line):
+  # test1-nextline: error2
+  def foo
+    # test1-nextline: error1 # test2-nextline: error1
+    :bar
+  end
+
+Given ruby:
+  def foo
+    if bar
+      :bar
+    else
+      :baz
+    end
+  end
+
+Execute:
+  let bnr = bufnr('')
+  call S('disable_range', [Entry1(bnr, 1, 'error2')], 1, 7)
+  call S('disable_range', [
+      \ Entry1(bufnr(''), 3, 'error1'),
+      \ Entry2(bufnr(''), 3, 'error1')
+      \ ], 3, 7)
+
+Expect ruby (s:disable_range silences in range):
+  # test1-disable: error2
+  def foo
+    # test1-disable: error1 # test2-disable: error1
+    if bar
+      :bar
+    else
+      :baz
+    end
+    # test1-enable: error1 # test2-enable: error1
+  end
+  # test1-enable: error2
+
+Given ruby:
+  def foo
+    :bar
+  end
+
+Execute:
+  let bnr = bufnr('')
+  call S('disable_file', [
+      \ Entry1(bnr, 1, 'error2'),
+      \ Entry1(bnr, 3, 'error1'),
+      \ Entry2(bnr, 3, 'error1')
+      \ ], 1)
+
+Expect ruby (s:disable_file silences whole file):
+  # test1-file: error1 error2
+  # test2-file: error1
+  def foo
+    :bar
+  end
+
+Execute (s:parse_cmd_line determines range from command line):
+  let bnr = bufnr('')
+
+  AssertEqual [ bnr,
+    \ line("'<"),
+    \ line("'>"),
+    \], S('parse_cmd_line', "'<,'>ALESilence", [bnr]),
+    \ "should parse range marks"
+
+  AssertEqual [ bnr,
+    \ 1,
+    \ 3,
+    \], S('parse_cmd_line', '1,3ALESilence', [bnr]),
+    \ "should handle explicit range"
+
+  AssertEqual [ bnr,
+    \ 1,
+    \], S('parse_cmd_line', '1ALESilence', [bnr]),
+    \ "should handle single line"
+
+  AssertEqual [ bnr,
+    \ line('.')
+    \], S('parse_cmd_line', 'ALESilence', [bnr]),
+    \ "should return only current line without bang"
+
+  AssertEqual [ bnr,
+    \], S('parse_cmd_line', 'ALESilence!', [bnr]),
+    \ "should return no range with bang"
+
+  AssertEqual [ bnr,
+    \ 1,
+    \ 3,
+    \], S('parse_cmd_line', '1,3ALESilence!', [bnr]),
+    \ "should return parse range with bang"
+
+Execute (s:filter_range returns errors in range):
+  let E = EntryFor('test')
+  let bnr = bufnr('')
+  let line1 = E(bnr, 1, 'error1')
+  let line2 = E(bnr, 2, 'error2')
+  let line3 = E(bnr, 3, 'error3')
+  call SetBufferInfo(bnr, line1, line2, line3)
+
+
+  AssertEqual [line1, line2],        S('filter_range', bnr, 1, 2)
+  AssertEqual [line2],               S('filter_range', bnr, 2)
+  AssertEqual [line1, line2, line3], S('filter_range', bnr)
+
+Execute (s:partition partitions a list by key):
+  let list = [{'a': 1}, {'a': 1}, {'a': 2}, {'a': 3}, {'a': 3}]
+  let expected = [[{'a': 1}, {'a': 1}], [{'a': 2}], [{'a': 3}, {'a': 3}]]
+  AssertEqual expected, S('partition', list, 'a')
+
+Execute (s:set_nested sets a value in nested dictionaries):
+  call S('set_nested', g:, 'value', 'key1', 'key2', 'key3')
+  AssertEqual 'value', g:key1.key2.key3

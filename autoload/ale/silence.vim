@@ -5,31 +5,58 @@ function! ale#silence#(bang, line1, line2, ...) abort " {{{2
   let bufnr = winbufnr('.')
 
   if a:bang " silence filewise
-    let remainder = s:disable_file(s:filter_errors(s:filter_range(bufnr), a:000), a:line1)
-    return
+    let errors = a:line1 == a:line2 ?
+               \ s:filter_errors(s:filter_range(bufnr, 1, line('$')), a:000) :
+               \ s:filter_errors(s:filter_range(bufnr, a:line1, a:line2), a:000)
+
+    let remainder = s:disable_file(errors, a:line1)
+    if s:getopt('ale_silence_filewise_fallback', 0)
+      return remainder
+    endif
   endif
 
-  let errors = s:filter_errors(s:filter_range(bufnr, a:line1, a:line2), a:000)
+  let errors = a:bang ?
+             \ remainder :
+             \ s:filter_errors(s:filter_range(bufnr, a:line1, a:line2), a:000)
 
   if a:line1 == a:line2
-    if get(g:, 'ale_silence_prefer_inline', 0)
-      call s:disable_next_line(s:disable_inline(errors))
-    else
-      call s:disable_inline(s:disable_next_line(errors))
-    endif
-  else " range of lines
-    if get(g:, 'ale_silence_range_fallback_linewise', 1)
-      call s:disable_range_linewise(s:disable_range(errors, a:line1, a:line2))
-    else
-      call s:disable_range(errors, a:line1, a:line2)
-    endif
+    return s:getopt('ale_silence_prefer_inline', 0) ?
+         \ s:disable_next_line(s:disable_inline(errors)) :
+         \ s:disable_inline(s:disable_next_line(errors))
+  else
+    return s:getopt('ale_silence_range_fallback', 1) ?
+         \ s:disable_range_linewise(s:disable_range(errors, a:line1, a:line2)) :
+         \ s:disable_range(errors, a:line1, a:line2)
   endif
 endfunction
 
+function! ale#silence#List(...) abort " {{{2
+  let lines = []
+  " NOTE: as of now, only list the listers for which there are currently errors
+  " need some other place to get 'currently active linters' from
+  for linter in map(s:partition(s:get_buffer_info(a:0 ? a:1 : s:winbufnr('')),
+                 \              'linter_name'),
+                 \ 'v:val[0].linter_name')
+
+    call add(lines, printf("==== %s ====", linter))
+    let directives = s:get_directives(linter)
+    for name in s:directive_order
+      if !has_key(directives, name)
+        continue
+      endif
+      let Format = type(directives[name]) is v:t_string ?
+            \ ale#silence#Format(directives[name]) :
+            \ directives[name]
+      call add(lines, printf("%-10s %s",
+                           \ name,
+                           \ Format(['<err1>', '<err2>', '...'])))
+    endfor
+  endfor
+  return lines
+endfunction
 
 function! ale#silence#complete(arg_lead, cmd_line, cursor_pos) abort " {{{2
   " creates completions
-  " TODO: add handling of filewise bang!
   let args = s:parse_cmd_line(a:cmd_line, [s:winbufnr('.')])
   return join(uniq(sort(map(filter(call('s:filter_range', args),
                       \           'has_key(v:val, "code")'),
@@ -45,18 +72,6 @@ function! ale#silence#Format(format, ...) abort " {{{2
   return funcref('DirFormatter')
 endfunction
 
-" -- g: keys -- {{{1
-
-let s:directives = 'ale_linter_silence_directive'
-let s:unsupported = 'ale_linter_silence_unsupported'
-let s:directive_order = [
-      \ 'file',
-      \ 'nextline',
-      \ 'inline',
-      \ 'start',
-      \ 'end'
-      \]
-let s:[s:unsupported] = {}
 
 " -- Disablers -- {{{1
 
@@ -195,6 +210,20 @@ function! s:disable_range_linewise(errors) abort " {{{2
 endfunction
 
 " -- Util -- {{{1
+function! s:getopt(key, default) " {{{2
+  return s:get(a:key.'_'.&filetype,
+             \ s:get(a:key, a:default, b:, g:, s:),
+             \ b:, g:)
+endfunction
+
+function! s:get(key, default, ...) " {{{2
+  for scope in a:000
+    if has_key(scope, a:key)
+      return scope[a:key]
+    endif
+  endfor
+  return a:default
+endfunction
 
 function! s:offset_lnum(errors, start, ...) abort " {{{2
   " a:errors: list of errors
@@ -295,27 +324,6 @@ function! s:get_formatter(error, type) abort " {{{2
   return Format
 endfunction
 
-function! ale#silence#List(...) abort " {{{2
-  let lines = []
-  for linter in map(s:partition(s:get_buffer_info(a:0 ? a:1 : s:winbufnr('')),
-                 \              'linter_name'),
-                 \ 'v:val[0].linter_name')
-
-    call add(lines, printf("==== %s ====", linter))
-    let directives = s:get_directives(linter)
-    for name in s:directive_order
-      if !has_key(directives, name)
-        continue
-      endif
-      let Format = type(directives[name]) is v:t_string ?
-            \ ale#silence#Format(directives[name]) :
-            \ directives[name]
-      call add(lines, printf("%-10s %s", name, Format(['<err1>', '<err2>', '...'])))
-    endfor
-  endfor
-  return lines
-endfunction
-
 function! s:get_directives(linter) " {{{2
   try
     return call('ale_silence#'.a:linter.'#GetSilenceDirectives', [])
@@ -383,7 +391,8 @@ function! s:error_id(key, error) abort
 endfunction
 
 
-" cmd_line: command line in the form on N,NCmd, NCmd or Cmd
+" cmd_line: command line in the form of M,MCmd, N,NCmd, NCmd or Cmd
+"           where N is a line number and M is a mark
 " args:     argument list for adding parsed range/count
 function! s:parse_cmd_line(cmd_line, args) abort
   " find start of command by first uppercase letter
@@ -395,12 +404,32 @@ function! s:parse_cmd_line(cmd_line, args) abort
     endif
     return a:args
   elseif cmd_start > 0
-    return extend(a:args, map(split(a:cmd_line[:cmd_start-1], ','),
-                           \ "v:val =~# '^\\d\\+$' ? str2nr(v:val) : line(v:val)"))
+    return extend(a:args,
+                \ map(split(a:cmd_line[:cmd_start-1], ','),
+                    \ "v:val =~# '^\\d\\+$' ? str2nr(v:val) : line(v:val)"))
   endif
 endfunction
 
-" -- TESTING -- {{{2
+" -- OPTIONS -- {{{1
+
+let s:ale_silence_filewise_fallback = 0
+let s:ale_silence_prefer_inline = 0
+let s:ale_silence_range_fallback = 1
+
+let s:directive_order = [
+      \ 'file',
+      \ 'nextline',
+      \ 'inline',
+      \ 'start',
+      \ 'end'
+      \]
+
+let s:directives = 'ale_linter_silence_directive'
+let s:unsupported = 'ale_linter_silence_unsupported'
+let s:[s:unsupported] = {}
+
+
+" -- TESTING -- {{{1
 
 if get(g:, 'ale_silence_TESTING')
   function! s:winbufnr(arg) abort

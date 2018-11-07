@@ -1,0 +1,63 @@
+Execute (include helper):
+  function! EntryFor(name)
+    let name = a:name
+    function! Entry(...) closure
+      if a:0 == 3
+        return {
+          \ 'bufnr': a:1,
+          \ 'lnum':  a:2,
+          \ 'code':  a:3,
+          \ 'linter_name': name
+          \ }
+      elseif a:0 == 2
+        return {
+          \ 'lnum': a:1,
+          \ 'code': a:2,
+          \ 'linter_name': name
+          \ }
+      else
+        throw "EntryFor needs 2 or 3 arguments"
+      endif
+    endfun
+    return funcref('Entry')
+  endfun
+
+
+  function! SetBufferInfo(bufnr, ...)
+    let bufnr = a:bufnr
+    function! SetBufNr(idx, value) closure
+      let a:value.bufnr = get(a:value, 'bufnr', bufnr)
+      return a:value
+    endfun
+
+    let g:ale_buffer_info = {
+    \ a:bufnr : {
+    \   'loclist': map(copy(a:000), funcref('SetBufNr')) }
+    \ }
+  endfun
+
+  function! TestLinters()
+    return {
+      \ 'test1': {
+        \ 'inline':   '# test1-inline: %s',
+        \ 'nextline': '# test1-nextline: %s',
+        \ 'start':    '# test1-disable: %s',
+        \ 'end':      '# test1-enable: %s',
+        \ 'file':     '# test1-file: %s'
+      \ },
+      \ 'test2': {
+        \ 'inline':   '# test2-inline: %s',
+        \ 'nextline': '# test2-nextline: %s',
+        \ 'start':    '# test2-disable: %s',
+        \ 'end':      '# test2-enable: %s',
+        \ 'file':     '# test2-file: %s'
+      \ },
+      \ 'inline-only': {
+        \ 'inline': '# inline-only: %s'
+      \ },
+      \ 'nextline-only': {
+        \ 'nextline': '# nextline-only: %s'
+      \ },
+    \ }
+  endfun
+

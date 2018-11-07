@@ -1,0 +1,193 @@
+Include: silence_test_helper.vader
+Before:
+  let g:ale_silence_TESTING = 1
+  let g:ale_loaded = 1
+  runtime plugin/ale-silence.vim
+
+  let g:ale_linter_silence_directive = TestLinters()
+
+  let Entry1       = EntryFor('test1')
+  let Entry2       = EntryFor('test2')
+  let InlineOnly   = EntryFor('inline-only')
+  let NextlineOnly = EntryFor('nextline-only')
+  let Rubocop      = EntryFor('rubocop')
+
+Given ruby:
+  def foo
+    :bar
+  end
+
+Execute:
+  let bnr = bufnr('')
+  call SetBufferInfo(bnr,
+  \ Entry1(1, 'error2'),
+  \ Entry1(2, 'error1'),
+  \ Entry2(2, 'error1')
+  \)
+Do:
+  1j
+  :ALESilence\<CR>
+
+Expect ruby (:ALESilence silences errors on current line):
+  def foo
+    # test1-nextline: error1 # test2-nextline: error1
+    :bar
+  end
+
+Do:
+  j
+  :ALESilence test2:error1\<CR>
+
+Expect ruby (:ALESilence can take arguments):
+  def foo
+    # test2-nextline: error1
+    :bar
+  end
+
+Execute:
+  let bnr = bufnr('')
+  call SetBufferInfo(bnr,
+  \ Entry1(3, 'error2'),
+  \ Entry1(2, 'error1'),
+  \ Entry2(2, 'error1')
+  \)
+
+Do:
+  v2j
+  :'<,'>ALESilence\<CR>
+
+Expect ruby (:ALESilence can silence a range):
+  # test1-disable: error1 error2 # test2-disable: error1
+  def foo
+    :bar
+  end
+  # test1-enable: error1 error2 # test2-enable: error1
+
+Do:
+  v2j
+  :'<,'>ALESilence test1:error1 test2:error1\<CR>
+
+Expect ruby (:ALESilence can silence a range with arguments):
+  # test1-disable: error1 # test2-disable: error1
+  def foo
+    :bar
+  end
+  # test1-enable: error1 # test2-enable: error1
+
+Execute:
+  let bnr = bufnr('')
+  call SetBufferInfo(bnr,
+  \ InlineOnly(1, 'error1'),
+  \)
+
+Do:
+  :ALESilence\<CR>
+
+Expect ruby (:ALESilence uses inline if nextline is not available):
+  def foo # inline-only: error1
+    :bar
+  end
+
+Execute:
+  let bnr = bufnr('')
+  call SetBufferInfo(bnr,
+  \ InlineOnly(1, 'error1'),
+  \ NextlineOnly(1, 'error1')
+  \)
+
+Do:
+  :ALESilence\<CR>
+
+Expect ruby (:ALESilence handles mix of inline and nextline):
+  # nextline-only: error1
+  def foo # inline-only: error1
+    :bar
+  end
+
+Execute:
+  let bnr = bufnr('')
+  call SetBufferInfo(bnr,
+  \ InlineOnly(1, 'error1'),
+  \ NextlineOnly(1, 'error1'),
+  \ InlineOnly(3, 'error1'),
+  \ NextlineOnly(3, 'error1')
+  \)
+Do:
+  :1,3ALESilence\<CR>
+
+Expect ruby (:ALESilence uses nextline if range is not available):
+  # nextline-only: error1
+  def foo # inline-only: error1
+    :bar
+  # nextline-only: error1
+  end # inline-only: error1
+
+Execute:
+  let bnr = bufnr('')
+  call SetBufferInfo(bnr,
+  \ InlineOnly(1, 'error1'),
+  \ InlineOnly(3, 'error1'),
+  \ NextlineOnly(1, 'error1'),
+  \ NextlineOnly(3, 'error1'),
+  \ Entry1(1, 'error1'),
+  \ Entry1(3, 'error1'),
+  \)
+
+Do:
+  :1,3ALESilence\<CR>
+
+Expect ruby (:ALESilence handles mix of range, inline and nextline):
+  # test1-disable: error1
+  # nextline-only: error1
+  def foo # inline-only: error1
+    :bar
+  # nextline-only: error1
+  end # inline-only: error1
+  # test1-enable: error1
+
+Execute:
+  let bnr = bufnr('')
+  call SetBufferInfo(bnr,
+  \ Entry1(3, 'error2'),
+  \ Entry1(2, 'error1'),
+  \ Entry2(2, 'error1')
+  \)
+
+Do:
+  :ALESilence!\<CR>
+
+Expect ruby (:ALESilence! silences whole file):
+  # test1-file: error1 error2
+  # test2-file: error1
+  def foo
+    :bar
+  end
+
+Do:
+  G:ALESilence!\<CR>
+
+Expect ruby (:ALESilence! silences whole file when error on current line):
+  def foo
+    :bar
+  # test1-file: error1 error2
+  # test2-file: error1
+  end
+
+Do:
+  :ALESilence! test1:error1\<CR>
+
+Expect ruby (:ALESilence! can take arguments):
+  # test1-file: error1
+  def foo
+    :bar
+  end
+
+Do:
+  :1,2ALESilence!\<CR>
+
+Expect ruby (:ALESilence! silences errors in range filewise):
+  # test1-file: error1
+  # test2-file: error1
+  def foo
+    :bar
+  end

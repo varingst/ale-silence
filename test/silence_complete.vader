@@ -1,6 +1,9 @@
+Include: silence_test_helper.vader
 Before:
   let g:ale_silence_TESTING = 1
   runtime autoload/ale/silence.vim
+
+  let Rubocop = EntryFor('rubocop')
 
   let g:ale_buffer_info = {
   \ 99: {
@@ -15,25 +18,6 @@ Before:
   \ }
   \}
 
-Execute (s:get_buffer_info gets buffer info):
-  AssertEqual g:ale_buffer_info['99']['loclist'], S('get_buffer_info', '99')
-
-Execute (s:filter_range filters on file range):
-  let loclist = g:ale_buffer_info['99']['loclist']
-  let in_buffer = loclist[1:-2]
-  AssertEqual in_buffer, S('filter_range', '99')
-
-  let line = loclist[2:-3]
-  AssertEqual line, S('filter_range', '99', 3)
-
-  let range = loclist[2:-2]
-  AssertEqual range, S('filter_range', '99', 3, 4)
-
-Execute (s:parse_cmd_line parses range/count from command line):
-  AssertEqual ['', line('.')], S('parse_cmd_line', 'ALESilence', [''])
-  AssertEqual ['', 23],        S('parse_cmd_line', '23ALESilence', [''])
-  AssertEqual ['', 23, 25],    S('parse_cmd_line', '23,25ALESilence', [''])
-
 Execute (ale#silence#complete completes errors in file):
   let g:ale_silence_TESTING_winbufnr = 99
   AssertEqual join([
@@ -41,3 +25,13 @@ Execute (ale#silence#complete completes errors in file):
     \ 'test:err3',
     \ 'test:err4'
     \], "\n"), ale#silence#complete('', '2,4ALESilence', '')
+
+Execute (ale#silence#complete only provides errors for current line):
+  let bnr = bufnr('')
+  let g:ale_silence_TESTING_winbufnr = bnr
+  call SetBufferInfo(bnr,
+    \ Rubocop(1, 'error1'),
+    \)
+  AssertEqual join([
+    \ 'rubocop:error1'
+    \], "\n"), ale#silence#complete('', 'ALESilence', '')
