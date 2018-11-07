@@ -56,12 +56,15 @@ function! ale#silence#List(...) abort " {{{2
 endfunction
 
 function! ale#silence#complete(arg_lead, cmd_line, cursor_pos) abort " {{{2
-  " creates completions
-  let args = s:parse_cmd_line(a:cmd_line, [s:winbufnr('.')])
-  return join(uniq(sort(map(filter(call('s:filter_range', args),
-                      \           'has_key(v:val, "code")'),
-                      \     funcref('s:error_id')))),
-            \ "\n")
+   return s:complete_errors_in_range(s:parse_cmd_line(a:cmd_line,
+                                                   \ [s:winbufnr('.')]))
+endfunction
+
+function! ale#silence#complete_lookup(arg_lead, cmd_line, cursor_pos) abort " {{{ {{{2
+  let bufnr = s:winbufnr('.')
+  let line = line('.')
+  let comp = s:complete_errors_in_range([bufnr, line, line])
+  return strlen(comp) > 0 ? comp : s:complete_errors_in_range([bufnr])
 endfunction
 
 function! ale#silence#Format(format, ...) abort " {{{2
@@ -72,6 +75,42 @@ function! ale#silence#Format(format, ...) abort " {{{2
   return funcref('DirFormatter')
 endfunction
 
+function! ale#silence#LookupError(error_id) abort " {{{2
+  let info = s:from_error_id(a:error_id)
+  let optname = s:code_search_prefix. info.linter_name
+  let search = s:getopt(optname, '')
+
+  if !len(search)
+    try
+      let docs = call('ale_silence#'. info.linter_name .'#GetDocInfo', [])
+    catch /E117/
+      echoerr printf("No means to look up error code for linter '%s'",
+                   \ info.linter_name)
+      return
+    endtry
+    let g:[optname] = docs.code_search
+    let search = docs.code_search
+  endif
+  call s:browse(printf(search, info.code))
+endfunction
+
+function! ale#silence#BrowseDocs(linter_name) abort " {{{
+  let optname = s:linter_docs_prefix.a:linter_name
+
+  let url = s:getopt(optname, '')
+  if !len(url)
+    try
+      let docs = call('ale_silence#'.a:linter_name.'#GetDocInfo', [])
+    catch /E117/
+      echoerr printf("No means to look up docs for linter '%s'",
+                   \ info.linter_name)
+      return
+    endtry
+    let g:[optname] = docs.docs
+    let url = docs.docs
+  endif
+  call s:browse(url)
+endfunction
 
 " -- Disablers -- {{{1
 
@@ -390,6 +429,18 @@ function! s:error_id(key, error) abort
   return a:error.linter_name . ':' . a:error.code
 endfunction
 
+function! s:from_error_id(error_id) abort
+  let parts = split(a:error_id, ':')
+  return { 'linter_name': parts[0], 'code': join(parts[1:], ':') }
+endfunction
+
+function! s:complete_errors_in_range(range_args) " {{{2
+  return join(uniq(sort(map(filter(call('s:filter_range', a:range_args),
+                      \           'has_key(v:val, "code")'),
+                      \     funcref('s:error_id')))),
+            \ "\n")
+endfun
+
 
 " cmd_line: command line in the form of M,MCmd, N,NCmd, NCmd or Cmd
 "           where N is a line number and M is a mark
@@ -426,6 +477,8 @@ let s:directive_order = [
 
 let s:directives = 'ale_linter_silence_directive'
 let s:unsupported = 'ale_linter_silence_unsupported'
+let s:code_search_prefix = 'ale_docs_code_search_'
+let s:linter_docs_prefix = 'ale_docs_'
 let s:[s:unsupported] = {}
 
 
@@ -434,6 +487,10 @@ let s:[s:unsupported] = {}
 if get(g:, 'ale_silence_TESTING')
   function! s:winbufnr(arg) abort
     return get(g:, 'ale_silence_TESTING_winbufnr')
+  endfunction
+
+  function! s:browse(url) abort
+    call add(get(g:, 'ale_silence_TESTING_browser', []), a:url)
   endfunction
 
   nnoremap <SID> <SID>
@@ -445,5 +502,9 @@ if get(g:, 'ale_silence_TESTING')
 else
   function! s:winbufnr(arg) abort
     return winbufnr(a:arg)
+  endfunction
+
+  function! s:browse(url) abort
+    call netrw#BrowseX(a:url, netrw#CheckIfRemote())
   endfunction
 endif

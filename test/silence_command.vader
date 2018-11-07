@@ -1,6 +1,7 @@
 Include: silence_test_helper.vader
 Before:
   let g:ale_silence_TESTING = 1
+  let g:ale_silence_TESTING_winbufnr = 1
   let g:ale_loaded = 1
   runtime plugin/ale-silence.vim
 
