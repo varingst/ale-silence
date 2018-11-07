@@ -4,34 +4,44 @@ Before:
   runtime autoload/ale/silence.vim
 
   let Rubocop = EntryFor('rubocop')
+  let Entry1 = EntryFor('test')
 
-  let g:ale_buffer_info = {
-  \ 99: {
-  \   'loclist': [
-  \     {'bufnr': 98,  'lnum': 3, 'linter_name': 'test', 'code': 'err1'},
-  \     {'bufnr': 99,  'lnum': 2, 'linter_name': 'test', 'code': 'err2'},
-  \     {'bufnr': 99,  'lnum': 3, 'linter_name': 'test', 'code': 'err3'},
-  \     {'bufnr': 99,  'lnum': 3, 'linter_name': 'test', 'code': 'err4'},
-  \     {'bufnr': 99,  'lnum': 4, 'linter_name': 'test', 'code': 'err2'},
-  \     {'bufnr': 100, 'lnum': 3, 'linter_name': 'test', 'code': 'err1'},
-  \   ],
-  \ }
-  \}
-
-Execute (ale#silence#complete completes errors in file):
   let g:ale_silence_TESTING_winbufnr = 99
-  AssertEqual join([
-    \ 'test:err2',
-    \ 'test:err3',
-    \ 'test:err4'
-    \], "\n"), ale#silence#complete('', '2,4ALESilence', '')
+  call SetBufferInfo(99,
+    \ Entry1(98, 3, 'err1'),
+    \ Entry1(2, 'err2'),
+    \ Entry1(3, 'err3'),
+    \ Entry1(3, 'err4'),
+    \ Entry1(4, 'err2'),
+    \ Entry1(5, 'err5'),
+    \ Entry1(100, 3, 'err1'))
 
-Execute (ale#silence#complete only provides errors for current line):
-  let bnr = bufnr('')
-  let g:ale_silence_TESTING_winbufnr = bnr
-  call SetBufferInfo(bnr,
-    \ Rubocop(1, 'error1'),
-    \)
-  AssertEqual join([
-    \ 'rubocop:error1'
-    \], "\n"), ale#silence#complete('', 'ALESilence', '')
+  function! Cmd(cmd)
+    return ale#silence#complete('', a:cmd, '')
+  endfun
+
+  function! Comp(...)
+    return join(a:000, "\n")
+  endfun
+
+Execute (ALESilence completes errors on current line):
+  AssertEqual Comp(''),
+            \ Cmd('ALESilence')
+
+  AssertEqual Comp('test:err3', 'test:err4'),
+            \ Cmd('3ALESilence')
+
+Execute (N,NALESilence completes errors in range):
+  AssertEqual Comp(''),
+            \ Cmd('1,1ALESilence'),
+
+  AssertEqual Comp('test:err2', 'test:err3', 'test:err4'),
+            \ Cmd('2,4ALESilence')
+
+Execute (ALESilence! completes errors in file):
+  AssertEqual Comp('test:err2', 'test:err3', 'test:err4', 'test:err5'),
+            \ Cmd('ALESilence!')
+
+Execute (N,NALESilence completes errors in range):
+  AssertEqual Comp('test:err2', 'test:err5'),
+            \ Cmd('4,5ALESilence!')
