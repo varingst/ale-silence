@@ -7,16 +7,14 @@ function! ale#silence#(bang, line1, line2, ...) abort " {{{2
   let close = a:line2
 
   if a:bang
-    let [remainder, open, close] = s:disable_file(bufnr, open, close, a:000)
+    let [errors, open, close] = s:disable_file(bufnr, open, close, a:000)
 
     if !s:getopt('ale_silence_filewise_fallback', 0)
-      return remainder
+      return errors
     endif
+  else
+    let errors = s:filter_errors(s:filter_range(bufnr, open, close), a:000)
   endif
-
-  let errors = a:bang ?
-             \ remainder :
-             \ s:filter_errors(s:filter_range(bufnr, open, close), a:000)
 
   if open == close
     return s:getopt('ale_silence_prefer_inline', 0) ?
