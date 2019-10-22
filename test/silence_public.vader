@@ -33,6 +33,11 @@ Given ruby:
 Execute (ale#silence#List returns list of strings describing directives):
   let bnr = bufnr('')
   let g:ale_silence_TESTING_winbufnr = bnr
+  let g:ale_silence_TESTING_linters = [{
+  \ 'name': 'rubocop',
+  \ 'read_buffer': 1,
+  \}]
+
   call SetBufferInfo(bnr,
     \ Rubocop(1, 'error1'),
     \)

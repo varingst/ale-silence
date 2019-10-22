@@ -29,11 +29,9 @@ endfunction
 
 function! ale#silence#List(...) abort " {{{2
   let lines = []
-  " NOTE: as of now, only list the listers for which there are currently errors
-  " need some other place to get 'currently active linters' from
-  for linter in map(s:partition(s:get_buffer_info(a:0 ? a:1 : s:winbufnr('')),
-                 \              'linter_name'),
-                 \ 'v:val[0].linter_name')
+  for linter in map(filter(s:get_linters(&filetype),
+                         \ 'v:val.read_buffer'),
+                  \ 'v:val.name')
 
     call add(lines, printf("==== %s ====", linter))
     let directives = s:get_directives(linter)
@@ -501,6 +499,10 @@ if get(g:, 'ale_silence_TESTING')
     call add(get(g:, 'ale_silence_TESTING_browser', []), a:url)
   endfunction
 
+  function! s:get_linters(filetype)
+    return get(g:, 'ale_silence_TESTING_linters', [])
+  endfun
+
   nnoremap <SID> <SID>
   let s:sid = maparg('<SID>', 'n')
 
@@ -514,5 +516,9 @@ else
 
   function! s:browse(url) abort
     call netrw#BrowseX(a:url, netrw#CheckIfRemote())
+  endfunction
+
+  function! s:get_linters(filetype)
+    return ale#linter#Get(&filetype)
   endfunction
 endif
